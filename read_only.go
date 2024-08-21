@@ -14,7 +14,7 @@
 
 package raft
 
-import pb "go.etcd.io/raft/v3/raftpb"
+import "go.etcd.io/raft/v3/raftpb"
 
 // ReadState provides state for read only query.
 // It's caller's responsibility to call ReadIndex first before getting
@@ -27,7 +27,7 @@ type ReadState struct {
 }
 
 type readIndexStatus struct {
-	req   pb.Message
+	req   raftpb.Message
 	index uint64
 	// NB: this never records 'false', but it's more convenient to use this
 	// instead of a map[uint64]struct{} due to the API of quorum.VoteResult. If
@@ -53,7 +53,7 @@ func newReadOnly(option ReadOnlyOption) *readOnly {
 // `index` is the commit index of the raft state machine when it received
 // the read only request.
 // `m` is the original read only request message from the local or remote node.
-func (ro *readOnly) addRequest(index uint64, m pb.Message) {
+func (ro *readOnly) addRequest(index uint64, m raftpb.Message) {
 	s := string(m.Entries[0].Data)
 	if _, ok := ro.pendingReadIndex[s]; ok {
 		return
@@ -78,7 +78,7 @@ func (ro *readOnly) recvAck(id uint64, context []byte) map[uint64]bool {
 // advance advances the read only request queue kept by the readonly struct.
 // It dequeues the requests until it finds the read only request that has
 // the same context as the given `m`.
-func (ro *readOnly) advance(m pb.Message) []*readIndexStatus {
+func (ro *readOnly) advance(m raftpb.Message) []*readIndexStatus {
 	var (
 		i     int
 		found bool

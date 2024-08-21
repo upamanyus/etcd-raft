@@ -17,7 +17,7 @@ package raft
 import (
 	"errors"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -37,8 +37,8 @@ type RawNode struct {
 
 	// Mutable fields.
 	prevSoftSt     *SoftState
-	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	prevHardSt     raftpb.HardState
+	stepsOnAdvance []raftpb.Message
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -81,24 +81,24 @@ func (rn *RawNode) TickQuiesced() {
 
 // Campaign causes this RawNode to transition to candidate state.
 func (rn *RawNode) Campaign() error {
-	return rn.raft.Step(pb.Message{
-		Type: pb.MsgHup,
+	return rn.raft.Step(raftpb.Message{
+		Type: raftpb.MsgHup,
 	})
 }
 
 // Propose proposes data be appended to the raft log.
 func (rn *RawNode) Propose(data []byte) error {
-	return rn.raft.Step(pb.Message{
-		Type: pb.MsgProp,
+	return rn.raft.Step(raftpb.Message{
+		Type: raftpb.MsgProp,
 		From: rn.raft.id,
-		Entries: []pb.Entry{
+		Entries: []raftpb.Entry{
 			{Data: data},
 		}})
 }
 
 // ProposeConfChange proposes a config change. See (Node).ProposeConfChange for
 // details.
-func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
+func (rn *RawNode) ProposeConfChange(cc raftpb.ConfChangeI) error {
 	m, err := confChangeToMsg(cc)
 	if err != nil {
 		return err
@@ -109,13 +109,13 @@ func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 // ApplyConfChange applies a config change to the local node. The app must call
 // this when it applies a configuration change, except when it decides to reject
 // the configuration change, in which case no call must take place.
-func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
+func (rn *RawNode) ApplyConfChange(cc raftpb.ConfChangeI) *raftpb.ConfState {
 	cs := rn.raft.applyConfChange(cc.AsV2())
 	return &cs
 }
 
 // Step advances the state machine using the given message.
-func (rn *RawNode) Step(m pb.Message) error {
+func (rn *RawNode) Step(m raftpb.Message) error {
 	// Ignore unexpected local messages receiving over network.
 	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
 		return ErrStepLocalMsg
@@ -190,7 +190,7 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 
 // MustSync returns true if the hard state and count of Raft entries indicate
 // that a synchronous write to persistent storage is required.
-func MustSync(st, prevst pb.HardState, entsnum int) bool {
+func MustSync(st, prevst raftpb.HardState, entsnum int) bool {
 	// Persistent state on all servers:
 	// (Updated on stable storage before responding to RPCs)
 	// currentTerm
@@ -222,9 +222,9 @@ func needStorageAppendRespMsg(r *raft, rd Ready) bool {
 // state, and apply a snapshot. The message also carries a set of responses
 // that should be delivered after the rest of the message is processed. Used
 // with AsyncStorageWrites.
-func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type:    pb.MsgStorageAppend,
+func newStorageAppendMsg(r *raft, rd Ready) raftpb.Message {
+	m := raftpb.Message{
+		Type:    raftpb.MsgStorageAppend,
 		To:      LocalAppendThread,
 		From:    r.id,
 		Entries: rd.Entries,
@@ -265,9 +265,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 // after the unstable log entries, hard state, and snapshot in the current Ready
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
-func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
-	m := pb.Message{
-		Type: pb.MsgStorageAppendResp,
+func newStorageAppendRespMsg(r *raft, rd Ready) raftpb.Message {
+	m := raftpb.Message{
+		Type: raftpb.MsgStorageAppendResp,
 		To:   r.id,
 		From: LocalAppendThread,
 		// Dropped after term change, see below.
@@ -372,15 +372,15 @@ func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
 // message is processed. Used with AsyncStorageWrites.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
+func newStorageApplyMsg(r *raft, rd Ready) raftpb.Message {
 	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
+	return raftpb.Message{
+		Type:    raftpb.MsgStorageApply,
 		To:      LocalApplyThread,
 		From:    r.id,
 		Term:    0, // committed entries don't apply under a specific term
 		Entries: ents,
-		Responses: []pb.Message{
+		Responses: []raftpb.Message{
 			newStorageApplyRespMsg(r, ents),
 		},
 	}
@@ -389,9 +389,9 @@ func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
 // newStorageApplyRespMsg creates the message that should be returned to node
 // after the committed entries in the current Ready (along with those in all
 // prior Ready structs) have been applied to the local state machine.
-func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
-	return pb.Message{
-		Type:    pb.MsgStorageApplyResp,
+func newStorageApplyRespMsg(r *raft, ents []raftpb.Entry) raftpb.Message {
+	return raftpb.Message{
+		Type:    raftpb.MsgStorageApplyResp,
 		To:      r.id,
 		From:    LocalApplyThread,
 		Term:    0, // committed entries don't apply under a specific term
@@ -488,7 +488,7 @@ func (rn *RawNode) Advance(_ Ready) {
 	}
 	for i, m := range rn.stepsOnAdvance {
 		_ = rn.raft.Step(m)
-		rn.stepsOnAdvance[i] = pb.Message{}
+		rn.stepsOnAdvance[i] = raftpb.Message{}
 	}
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
@@ -532,25 +532,25 @@ func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tra
 
 // ReportUnreachable reports the given node is not reachable for the last send.
 func (rn *RawNode) ReportUnreachable(id uint64) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
+	_ = rn.raft.Step(raftpb.Message{Type: raftpb.MsgUnreachable, From: id})
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
 func (rn *RawNode) ReportSnapshot(id uint64, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
+	_ = rn.raft.Step(raftpb.Message{Type: raftpb.MsgSnapStatus, From: id, Reject: rej})
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
 func (rn *RawNode) TransferLeader(transferee uint64) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
+	_ = rn.raft.Step(raftpb.Message{Type: raftpb.MsgTransferLeader, From: transferee})
 }
 
 // ForgetLeader forgets a follower's current leader, changing it to None.
 // See (Node).ForgetLeader for details.
 func (rn *RawNode) ForgetLeader() error {
-	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
+	return rn.raft.Step(raftpb.Message{Type: raftpb.MsgForgetLeader})
 }
 
 // ReadIndex requests a read state. The read state will be set in ready.
@@ -558,5 +558,5 @@ func (rn *RawNode) ForgetLeader() error {
 // index, any linearizable read requests issued before the read request can be
 // processed safely. The read state will have the same rctx attached.
 func (rn *RawNode) ReadIndex(rctx []byte) {
-	_ = rn.raft.Step(pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
+	_ = rn.raft.Step(raftpb.Message{Type: raftpb.MsgReadIndex, Entries: []raftpb.Entry{{Data: rctx}}})
 }

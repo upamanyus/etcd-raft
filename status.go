@@ -17,7 +17,7 @@ package raft
 import (
 	"fmt"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -33,7 +33,7 @@ type Status struct {
 type BasicStatus struct {
 	ID uint64
 
-	pb.HardState
+	raftpb.HardState
 	SoftState
 
 	Applied uint64
@@ -89,7 +89,7 @@ func (s Status) MarshalJSON() ([]byte, error) {
 			j += subj
 		}
 		// remove the trailing ","
-		j = j[:len(j)-1] + "},"
+		j = string([]byte(j)[:len(j)-1]) + "},"
 	}
 
 	j += fmt.Sprintf(`"leadtransferee":"%x"}`, s.LeadTransferee)

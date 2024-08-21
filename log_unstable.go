@@ -14,7 +14,7 @@
 
 package raft
 
-import pb "go.etcd.io/raft/v3/raftpb"
+import "go.etcd.io/raft/v3/raftpb"
 
 // unstable contains "unstable" log entries and snapshot state that has
 // not yet been written to Storage. The type serves two roles. First, it
@@ -32,9 +32,9 @@ import pb "go.etcd.io/raft/v3/raftpb"
 // might need to truncate the log before persisting unstable.entries.
 type unstable struct {
 	// the incoming unstable snapshot, if any.
-	snapshot *pb.Snapshot
+	snapshot *raftpb.Snapshot
 	// all entries that have not yet been written to storage.
-	entries []pb.Entry
+	entries []raftpb.Entry
 	// entries[i] has raft log position i+offset.
 	offset uint64
 
@@ -93,7 +93,7 @@ func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
 
 // nextEntries returns the unstable entries that are not already in the process
 // of being written to storage.
-func (u *unstable) nextEntries() []pb.Entry {
+func (u *unstable) nextEntries() []raftpb.Entry {
 	inProgress := int(u.offsetInProgress - u.offset)
 	if len(u.entries) == inProgress {
 		return nil
@@ -103,7 +103,7 @@ func (u *unstable) nextEntries() []pb.Entry {
 
 // nextSnapshot returns the unstable snapshot, if one exists that is not already
 // in the process of being written to storage.
-func (u *unstable) nextSnapshot() *pb.Snapshot {
+func (u *unstable) nextSnapshot() *raftpb.Snapshot {
 	if u.snapshot == nil || u.snapshotInProgress {
 		return nil
 	}
@@ -172,7 +172,7 @@ func (u *unstable) shrinkEntriesArray() {
 	if len(u.entries) == 0 {
 		u.entries = nil
 	} else if len(u.entries)*lenMultiple < cap(u.entries) {
-		newEntries := make([]pb.Entry, len(u.entries))
+		newEntries := make([]raftpb.Entry, len(u.entries))
 		copy(newEntries, u.entries)
 		u.entries = newEntries
 	}
@@ -185,7 +185,7 @@ func (u *unstable) stableSnapTo(i uint64) {
 	}
 }
 
-func (u *unstable) restore(s pb.Snapshot) {
+func (u *unstable) restore(s raftpb.Snapshot) {
 	u.offset = s.Metadata.Index + 1
 	u.offsetInProgress = u.offset
 	u.entries = nil
@@ -193,7 +193,7 @@ func (u *unstable) restore(s pb.Snapshot) {
 	u.snapshotInProgress = false
 }
 
-func (u *unstable) truncateAndAppend(ents []pb.Entry) {
+func (u *unstable) truncateAndAppend(ents []raftpb.Entry) {
 	fromIndex := ents[0].Index
 	switch {
 	case fromIndex == u.offset+uint64(len(u.entries)):
@@ -222,10 +222,10 @@ func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 // will panic. The returned slice can be appended to, but the entries in it must
 // not be changed because they are still shared with unstable.
 //
-// TODO(pavelkalinnikov): this, and similar []pb.Entry slices, may bubble up all
+// TODO(pavelkalinnikov): this, and similar []raftpb.Entry slices, may bubble up all
 // the way to the application code through Ready struct. Protect other slices
 // similarly, and document how the client can use them.
-func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
+func (u *unstable) slice(lo uint64, hi uint64) []raftpb.Entry {
 	u.mustCheckOutOfBounds(lo, hi)
 	// NB: use the full slice expression to limit what the caller can do with the
 	// returned slice. For example, an append will reallocate and copy this slice

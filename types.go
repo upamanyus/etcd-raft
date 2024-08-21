@@ -17,7 +17,7 @@ package raft
 import (
 	"fmt"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // entryID uniquely identifies a raft log entry.
@@ -30,8 +30,8 @@ type entryID struct {
 	index uint64
 }
 
-// pbEntryID returns the ID of the given pb.Entry.
-func pbEntryID(entry *pb.Entry) entryID {
+// pbEntryID returns the ID of the given raftpb.Entry.
+func pbEntryID(entry *raftpb.Entry) entryID {
 	return entryID{term: entry.Term, index: entry.Index}
 }
 
@@ -70,7 +70,7 @@ type logSlice struct {
 	// prev is the ID of the entry immediately preceding the entries.
 	prev entryID
 	// entries contains the consecutive entries representing this slice.
-	entries []pb.Entry
+	entries []raftpb.Entry
 }
 
 // lastIndex returns the index of the last entry in this log slice. Returns

@@ -17,7 +17,7 @@ package raft
 import (
 	"errors"
 
-	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // Bootstrap initializes the RawNode for first use by appending configuration
@@ -48,15 +48,15 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// TODO(tbg): remove StartNode and give the application the right tools to
 	// bootstrap the initial membership in a cleaner way.
 	rn.raft.becomeFollower(1, None)
-	ents := make([]pb.Entry, len(peers))
+	ents := make([]raftpb.Entry, len(peers))
 	for i, peer := range peers {
-		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
+		cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
 		data, err := cc.Marshal()
 		if err != nil {
 			return err
 		}
 
-		ents[i] = pb.Entry{Type: pb.EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data}
+		ents[i] = raftpb.Entry{Type: raftpb.EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data}
 	}
 	rn.raft.raftLog.append(ents...)
 
@@ -74,7 +74,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// the invariant that committed < unstable?
 	rn.raft.raftLog.committed = uint64(len(ents))
 	for _, peer := range peers {
-		rn.raft.applyConfChange(pb.ConfChange{NodeID: peer.ID, Type: pb.ConfChangeAddNode}.AsV2())
+		rn.raft.applyConfChange(raftpb.ConfChange{NodeID: peer.ID, Type: raftpb.ConfChangeAddNode}.AsV2())
 	}
 	return nil
 }
