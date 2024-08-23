@@ -420,8 +420,10 @@ type raft struct {
 	disableProposalForwarding bool
 	stepDownOnRemoval         bool
 
-	tick func()
-	step stepFunc
+	tickId int
+	stepId int
+
+	StepHigherOrder func(raftpb.Message) error
 
 	logger Logger
 
@@ -433,6 +435,17 @@ type raft struct {
 
 	traceLogger TraceLogger
 }
+
+const (
+	tickElectionId int = iota
+	tickHeartbeatId
+)
+
+const (
+	stepFollowerId int = iota
+	stepCandidateId
+	stepLeaderId
+)
 
 func newRaft(c *Config) *raft {
 	if err := c.validate(); err != nil {
@@ -463,6 +476,7 @@ func newRaft(c *Config) *raft {
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 		traceLogger:                 c.TraceLogger,
 	}
+	r.StepHigherOrder = r.Step
 
 	traceInitState(r)
 
@@ -758,7 +772,7 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 		// leadership transfer will succeed and the new leader will leave
 		// the joint configuration, or the leadership transfer will fail,
 		// and we will propose the config change on the next advance.
-		if err := r.Step(m); err != nil {
+		if err := r.StepHigherOrder(m); err != nil {
 			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.trk.Config, err)
 		} else {
 			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.trk.Config)
@@ -847,6 +861,27 @@ func (r *raft) appendEntry(es ...raftpb.Entry) bool {
 	return true
 }
 
+func step(r *raft, m raftpb.Message) error {
+	switch r.stepId {
+	case stepLeaderId:
+		return stepLeader(r, m)
+	case stepCandidateId:
+		return stepCandidate(r, m)
+	case stepFollowerId:
+		return stepFollower(r, m)
+	}
+	panic("unknown")
+}
+
+func (r *raft) tick() {
+	switch r.tickId {
+	case tickElectionId:
+		r.tickElection()
+	case tickHeartbeatId:
+		r.tickHeartbeat()
+	}
+}
+
 // tickElection is run by followers and candidates after r.electionTimeout.
 func (r *raft) tickElection() {
 	r.electionElapsed++
@@ -890,9 +925,9 @@ func (r *raft) tickHeartbeat() {
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
-	r.step = stepFollower
+	r.stepId = stepFollowerId
 	r.reset(term)
-	r.tick = r.tickElection
+	r.tickId = tickElectionId
 	r.lead = lead
 	r.state = StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
@@ -905,9 +940,9 @@ func (r *raft) becomeCandidate() {
 	if r.state == StateLeader {
 		panic("invalid transition [leader -> candidate]")
 	}
-	r.step = stepCandidate
+	r.stepId = stepCandidateId
 	r.reset(r.Term + 1)
-	r.tick = r.tickElection
+	r.tickId = tickElectionId
 	r.Vote = r.id
 	r.state = StateCandidate
 	r.logger.Infof("%x became candidate at term %d", r.id, r.Term)
@@ -923,9 +958,9 @@ func (r *raft) becomePreCandidate() {
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
-	r.step = stepCandidate
+	r.stepId = stepCandidateId
 	r.trk.ResetVotes()
-	r.tick = r.tickElection
+	r.tickId = tickElectionId
 	r.lead = None
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
@@ -936,9 +971,9 @@ func (r *raft) becomeLeader() {
 	if r.state == StateFollower {
 		panic("invalid transition [follower -> leader]")
 	}
-	r.step = stepLeader
+	r.stepId = stepLeaderId
 	r.reset(r.Term)
-	r.tick = r.tickHeartbeat
+	r.tickId = tickHeartbeatId
 	r.lead = r.id
 	r.state = StateLeader
 	// Followers enter replicate mode when they've been successfully probed
@@ -1256,7 +1291,7 @@ func (r *raft) Step(m raftpb.Message) error {
 		}
 
 	default:
-		err := r.step(r, m)
+		err := step(r, m)
 		if err != nil {
 			return err
 		}
