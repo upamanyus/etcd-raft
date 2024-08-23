@@ -216,7 +216,7 @@ func (l *raftLog) hasNextOrInProgressUnstableEnts() bool {
 // appended them to the local raft log yet. If allowUnstable is true, committed
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
-func (l *raftLog) nextCommittedEnts(allowUnstable bool) ([]raftpb.Entry) {
+func (l *raftLog) nextCommittedEnts(allowUnstable bool) []raftpb.Entry {
 	var ents []raftpb.Entry
 	if l.applyingEntsPaused {
 		// Entry application outstanding size limit reached.

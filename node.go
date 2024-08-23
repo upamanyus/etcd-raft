@@ -464,7 +464,9 @@ func (n *node) Tick() {
 	}
 }
 
-func (n *node) Campaign(ctx context.Context) error { return n.step(ctx, raftpb.Message{Type: raftpb.MsgHup}) }
+func (n *node) Campaign(ctx context.Context) error {
+	return n.step(ctx, raftpb.Message{Type: raftpb.MsgHup})
+}
 
 func (n *node) Propose(ctx context.Context, data []byte) error {
 	return n.stepWait(ctx, raftpb.Message{Type: raftpb.MsgProp, Entries: []raftpb.Entry{{Data: data}}})
