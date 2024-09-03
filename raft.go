@@ -421,7 +421,7 @@ type raft struct {
 	stepDownOnRemoval         bool
 
 	tickId int
-	step func(r *raft, m raftpb.Message) error
+	step   func(r *raft, m raftpb.Message) error
 
 	StepHigherOrder func(raftpb.Message) error
 
@@ -1284,6 +1284,7 @@ func (r *raft) Step(m raftpb.Message) error {
 type stepFunc func(r *raft, m raftpb.Message) error
 
 var stepLeaderGlobal func(*raft, raftpb.Message) error
+
 func stepLeader(r *raft, m raftpb.Message) error {
 	// These message types do not require any progress for m.From.
 	switch m.Type {
@@ -1684,6 +1685,7 @@ func stepLeader(r *raft, m raftpb.Message) error {
 }
 
 var stepCandidateGlobal func(*raft, raftpb.Message) error
+
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m raftpb.Message) error {
@@ -1732,6 +1734,7 @@ func stepCandidate(r *raft, m raftpb.Message) error {
 }
 
 var stepFollowerGlobal func(*raft, raftpb.Message) error
+
 func stepFollower(r *raft, m raftpb.Message) error {
 	switch m.Type {
 	case raftpb.MsgProp:
