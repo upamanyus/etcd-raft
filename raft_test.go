@@ -3920,20 +3920,22 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 	return &network{
 		peers:   npeers,
 		storage: nstorage,
-		dropm:   make(map[connem]float64),
+		dropm64:   make(map[connem]uint64),
 		ignorem: make(map[pb.MessageType]bool),
 	}
 }
 
 func (nw *network) drop(from, to uint64, perc float64) {
-	// nw.dropm[connem{from, to}] = uint64(perc * (1 << 64))
-	nw.dropm[connem{from, to}] = perc
-	fmt.Println(nw.dropm[connem{from, to}])
+	if perc >= 1.0 {
+		nw.dropm64[connem{from, to}] = (1 << 64) - 1
+	} else {
+		nw.dropm64[connem{from, to}] = uint64(perc * float64(uint64((1 << 64) - 1)))
+	}
 }
 
 func (nw *network) cut(one, other uint64) {
-	nw.drop(one, other, 2.0) // always drop
-	nw.drop(other, one, 2.0) // always drop
+	nw.drop(one, other, 1.0) // always drop
+	nw.drop(other, one, 1.0) // always drop
 }
 
 func (nw *network) isolate(id uint64) {
@@ -3951,7 +3953,7 @@ func (nw *network) ignore(t pb.MessageType) {
 }
 
 func (nw *network) recover() {
-	nw.dropm = make(map[connem]float64)
+	nw.dropm64 = make(map[connem]uint64)
 	nw.ignorem = make(map[pb.MessageType]bool)
 }
 

@@ -59,7 +59,7 @@ type network struct {
 
 	peers   map[uint64]stateMachine
 	storage map[uint64]*MemoryStorage
-	dropm   map[connem]float64
+	dropm64   map[connem]uint64
 	ignorem map[raftpb.MessageType]bool
 
 	// msgHook is called for each message sent. It may inspect the
@@ -151,7 +151,7 @@ func newNetworkWithConfigInit(configFunc func(*Config), peers ...stateMachine) *
 	return &network{
 		peers:   npeers,
 		storage: nstorage,
-		dropm:   make(map[connem]float64),
+		dropm64:   make(map[connem]uint64),
 		ignorem: make(map[raftpb.MessageType]bool),
 	}
 }
@@ -167,8 +167,8 @@ func (nw *network) filter(msgs []raftpb.Message) []raftpb.Message {
 			// hups never go over the network, so don't drop them but panic
 			panic("unexpected msgHup")
 		default:
-			perc := nw.dropm[connem{m.From, m.To}]
-			if n := rand.Float64(); n < perc {
+			perc64 := nw.dropm64[connem{m.From, m.To}]
+			if n := rand.Uint64(); n < perc64 {
 				continue
 			}
 		}
