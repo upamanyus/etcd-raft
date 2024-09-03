@@ -421,7 +421,7 @@ type raft struct {
 	stepDownOnRemoval         bool
 
 	tickId int
-	stepId int
+	step func(r *raft, m raftpb.Message) error
 
 	StepHigherOrder func(raftpb.Message) error
 
@@ -439,12 +439,6 @@ type raft struct {
 const (
 	tickElectionId int = iota
 	tickHeartbeatId
-)
-
-const (
-	stepFollowerId int = iota
-	stepCandidateId
-	stepLeaderId
 )
 
 func newRaft(c *Config) *raft {
@@ -861,18 +855,6 @@ func (r *raft) appendEntry(es ...raftpb.Entry) bool {
 	return true
 }
 
-func step(r *raft, m raftpb.Message) error {
-	switch r.stepId {
-	case stepLeaderId:
-		return stepLeader(r, m)
-	case stepCandidateId:
-		return stepCandidate(r, m)
-	case stepFollowerId:
-		return stepFollower(r, m)
-	}
-	panic("unknown")
-}
-
 func (r *raft) tick() {
 	switch r.tickId {
 	case tickElectionId:
@@ -925,7 +907,7 @@ func (r *raft) tickHeartbeat() {
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
-	r.stepId = stepFollowerId
+	r.step = stepFollowerGlobal
 	r.reset(term)
 	r.tickId = tickElectionId
 	r.lead = lead
@@ -940,7 +922,7 @@ func (r *raft) becomeCandidate() {
 	if r.state == StateLeader {
 		panic("invalid transition [leader -> candidate]")
 	}
-	r.stepId = stepCandidateId
+	r.step = stepCandidateGlobal
 	r.reset(r.Term + 1)
 	r.tickId = tickElectionId
 	r.Vote = r.id
@@ -958,7 +940,7 @@ func (r *raft) becomePreCandidate() {
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
-	r.stepId = stepCandidateId
+	r.step = stepCandidateGlobal
 	r.trk.ResetVotes()
 	r.tickId = tickElectionId
 	r.lead = None
@@ -971,7 +953,7 @@ func (r *raft) becomeLeader() {
 	if r.state == StateFollower {
 		panic("invalid transition [follower -> leader]")
 	}
-	r.stepId = stepLeaderId
+	r.step = stepLeaderGlobal
 	r.reset(r.Term)
 	r.tickId = tickHeartbeatId
 	r.lead = r.id
@@ -1291,7 +1273,7 @@ func (r *raft) Step(m raftpb.Message) error {
 		}
 
 	default:
-		err := step(r, m)
+		err := r.step(r, m)
 		if err != nil {
 			return err
 		}
@@ -1301,6 +1283,7 @@ func (r *raft) Step(m raftpb.Message) error {
 
 type stepFunc func(r *raft, m raftpb.Message) error
 
+var stepLeaderGlobal func(*raft, raftpb.Message) error
 func stepLeader(r *raft, m raftpb.Message) error {
 	// These message types do not require any progress for m.From.
 	switch m.Type {
@@ -1700,6 +1683,7 @@ func stepLeader(r *raft, m raftpb.Message) error {
 	return nil
 }
 
+var stepCandidateGlobal func(*raft, raftpb.Message) error
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m raftpb.Message) error {
@@ -1747,6 +1731,7 @@ func stepCandidate(r *raft, m raftpb.Message) error {
 	return nil
 }
 
+var stepFollowerGlobal func(*raft, raftpb.Message) error
 func stepFollower(r *raft, m raftpb.Message) error {
 	switch m.Type {
 	case raftpb.MsgProp:
@@ -2192,4 +2177,10 @@ func sendMsgReadIndexResponse(r *raft, m raftpb.Message) {
 			r.send(resp)
 		}
 	}
+}
+
+func init() {
+	stepFollowerGlobal = stepFollower
+	stepCandidateGlobal = stepCandidate
+	stepLeaderGlobal = stepLeader
 }

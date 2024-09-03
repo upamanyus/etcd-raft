@@ -464,7 +464,7 @@ func (l *raftLog) maybeCommit(at entryID) bool {
 }
 
 func (l *raftLog) restore(s raftpb.Snapshot) {
-	// l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, s.Metadata.Index, s.Metadata.Term)
+	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, s.Metadata.Index, s.Metadata.Term)
 	l.committed = s.Metadata.Index
 	l.unstable.restore(s)
 }
