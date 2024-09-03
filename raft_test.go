@@ -17,7 +17,6 @@ package raft
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"strings"
 	"testing"
 
@@ -47,48 +46,6 @@ func mustAppendEntry(r *raft, ents ...pb.Entry) {
 	if !r.appendEntry(ents...) {
 		panic("entry unexpectedly dropped")
 	}
-}
-
-type stateMachine interface {
-	Step(m pb.Message) error
-	readMessages() []pb.Message
-	advanceMessagesAfterAppend()
-}
-
-func (r *raft) readMessages() []pb.Message {
-	r.advanceMessagesAfterAppend()
-	msgs := r.msgs
-	r.msgs = nil
-	return msgs
-}
-
-func (r *raft) advanceMessagesAfterAppend() {
-	for {
-		msgs := r.takeMessagesAfterAppend()
-		if len(msgs) == 0 {
-			break
-		}
-		r.stepOrSend(msgs)
-	}
-}
-
-func (r *raft) takeMessagesAfterAppend() []pb.Message {
-	msgs := r.msgsAfterAppend
-	r.msgsAfterAppend = nil
-	return msgs
-}
-
-func (r *raft) stepOrSend(msgs []pb.Message) error {
-	for _, m := range msgs {
-		if m.To == r.id {
-			if err := r.Step(m); err != nil {
-				return err
-			}
-		} else {
-			r.msgs = append(r.msgs, m)
-		}
-	}
-	return nil
 }
 
 func TestProgressLeader(t *testing.T) {
@@ -3836,20 +3793,6 @@ func TestFastLogRejection(t *testing.T) {
 	}
 }
 
-func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
-	storage := NewMemoryStorage()
-	for i, term := range terms {
-		storage.Append([]pb.Entry{{Index: uint64(i + 1), Term: term}})
-	}
-	cfg := newTestConfig(1, 5, 1, storage)
-	if configFunc != nil {
-		configFunc(cfg)
-	}
-	sm := newRaft(cfg)
-	sm.reset(terms[len(terms)-1])
-	return sm
-}
-
 // votedWithConfig creates a raft state machine with Vote and Term set
 // to the given value but no log entries (indicating that it voted in
 // the given term but has not received any logs).
@@ -3917,19 +3860,6 @@ func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	return msgs[0]
 }
 
-type network struct {
-	t *testing.T // optional
-
-	peers   map[uint64]stateMachine
-	storage map[uint64]*MemoryStorage
-	dropm   map[connem]float64
-	ignorem map[pb.MessageType]bool
-
-	// msgHook is called for each message sent. It may inspect the
-	// message and return true to send it or false to drop it.
-	msgHook func(pb.Message) bool
-}
-
 // newNetwork initializes a network from peers.
 // A nil node will be replaced with a new *stateMachine.
 // A *stateMachine will get its k, id.
@@ -3995,25 +3925,10 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 	}
 }
 
-func preVoteConfig(c *Config) {
-	c.PreVote = true
-}
-
-func (nw *network) send(msgs ...pb.Message) {
-	for len(msgs) > 0 {
-		m := msgs[0]
-		p := nw.peers[m.To]
-		if nw.t != nil {
-			nw.t.Log(DescribeMessage(m, nil))
-		}
-		_ = p.Step(m)
-		p.advanceMessagesAfterAppend()
-		msgs = append(msgs[1:], nw.filter(p.readMessages())...)
-	}
-}
-
 func (nw *network) drop(from, to uint64, perc float64) {
+	// nw.dropm[connem{from, to}] = uint64(perc * (1 << 64))
 	nw.dropm[connem{from, to}] = perc
+	fmt.Println(nw.dropm[connem{from, to}])
 }
 
 func (nw *network) cut(one, other uint64) {
@@ -4040,52 +3955,6 @@ func (nw *network) recover() {
 	nw.ignorem = make(map[pb.MessageType]bool)
 }
 
-func (nw *network) filter(msgs []pb.Message) []pb.Message {
-	var mm []pb.Message
-	for _, m := range msgs {
-		if nw.ignorem[m.Type] {
-			continue
-		}
-		switch m.Type {
-		case pb.MsgHup:
-			// hups never go over the network, so don't drop them but panic
-			panic("unexpected msgHup")
-		default:
-			perc := nw.dropm[connem{m.From, m.To}]
-			if n := rand.Float64(); n < perc {
-				continue
-			}
-		}
-		if nw.msgHook != nil {
-			if !nw.msgHook(m) {
-				continue
-			}
-		}
-		mm = append(mm, m)
-	}
-	return mm
-}
-
-type connem struct {
-	from, to uint64
-}
-
-type blackHole struct{}
-
-func (blackHole) Step(pb.Message) error       { return nil }
-func (blackHole) readMessages() []pb.Message  { return nil }
-func (blackHole) advanceMessagesAfterAppend() {}
-
-var nopStepper = &blackHole{}
-
-func idsBySize(size int) []uint64 {
-	ids := make([]uint64, size)
-	for i := 0; i < size; i++ {
-		ids[i] = 1 + uint64(i)
-	}
-	return ids
-}
-
 // setRandomizedElectionTimeout set up the value by caller instead of choosing
 // by system, in some test scenario we need to fill in some expected value to
 // ensure the certainty
@@ -4099,37 +3968,10 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
-func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config {
-	return &Config{
-		ID:              id,
-		ElectionTick:    election,
-		HeartbeatTick:   heartbeat,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-	}
-}
-
-type testMemoryStorageOptions func(*MemoryStorage)
-
-func withPeers(peers ...uint64) testMemoryStorageOptions {
-	return func(ms *MemoryStorage) {
-		ms.snapshot.Metadata.ConfState.Voters = peers
-	}
-}
-
 func withLearners(learners ...uint64) testMemoryStorageOptions {
 	return func(ms *MemoryStorage) {
 		ms.snapshot.Metadata.ConfState.Learners = learners
 	}
-}
-
-func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
-	ms := NewMemoryStorage()
-	for _, o := range opts {
-		o(ms)
-	}
-	return ms
 }
 
 func newTestRaft(id uint64, election, heartbeat int, storage Storage) *raft {
