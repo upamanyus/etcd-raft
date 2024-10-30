@@ -25,14 +25,17 @@ func (c JointConfig) String() string {
 	return c[0].String()
 }
 
+type unit = struct {}
+
 // IDs returns a newly initialized map representing the set of voters present
 // in the joint configuration.
-func (c JointConfig) IDs() map[uint64]struct{} {
-	m := map[uint64]struct{}{}
-	for _, cc := range c {
-		for id := range cc {
-			m[id] = struct{}{}
-		}
+func (c JointConfig) IDs() map[uint64]unit {
+	m := make(map[uint64]unit)
+	for id := range c[0] {
+		m[id] = unit{}
+	}
+	for id := range c[1] {
+		m[id] = unit{}
 	}
 	return m
 }

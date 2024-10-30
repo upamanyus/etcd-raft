@@ -16,12 +16,12 @@ package tracker
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
 	"go.etcd.io/raft/v3/quorum"
-	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/quorum/slices64"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // Config reflects the configuration tracked in a ProgressTracker.
@@ -133,21 +133,21 @@ func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
 		MaxInflightBytes: maxBytes,
 		Config: Config{
 			Voters: quorum.JointConfig{
-				quorum.MajorityConfig{},
+				make(quorum.MajorityConfig),
 				nil, // only populated when used
 			},
 			Learners:     nil, // only populated when used
 			LearnersNext: nil, // only populated when used
 		},
-		Votes:    map[uint64]bool{},
-		Progress: map[uint64]*Progress{},
+		Votes:    make(map[uint64]bool),
+		Progress: make(map[uint64]*Progress),
 	}
 	return p
 }
 
 // ConfState returns a ConfState representing the active configuration.
-func (p *ProgressTracker) ConfState() pb.ConfState {
-	return pb.ConfState{
+func (p *ProgressTracker) ConfState() raftpb.ConfState {
+	return raftpb.ConfState{
 		Voters:         p.Voters[0].Slice(),
 		VotersOutgoing: p.Voters[1].Slice(),
 		Learners:       quorum.MajorityConfig(p.Learners).Slice(),
@@ -198,7 +198,7 @@ func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 		n--
 		ids[n] = id
 	}
-	slices.Sort(ids)
+	slices64.Sort(ids)
 	for _, id := range ids {
 		f(id, p.Progress[id])
 	}
@@ -207,7 +207,7 @@ func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 // QuorumActive returns true if the quorum is active from the view of the local
 // raft state machine. Otherwise, it returns false.
 func (p *ProgressTracker) QuorumActive() bool {
-	votes := map[uint64]bool{}
+	votes := make(map[uint64]bool)
 	p.Visit(func(id uint64, pr *Progress) {
 		if pr.IsLearner {
 			return
@@ -244,7 +244,7 @@ func (p *ProgressTracker) LearnerNodes() []uint64 {
 
 // ResetVotes prepares for a new round of vote counting via recordVote.
 func (p *ProgressTracker) ResetVotes() {
-	p.Votes = map[uint64]bool{}
+	p.Votes = make(map[uint64]bool)
 }
 
 // RecordVote records that the node with the given id voted for this Raft
@@ -258,7 +258,8 @@ func (p *ProgressTracker) RecordVote(id uint64, v bool) {
 
 // TallyVotes returns the number of granted and rejected Votes, and whether the
 // election outcome is known.
-func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.VoteResult) {
+func (p *ProgressTracker) TallyVotes() (int, int, quorum.VoteResult) {
+	var granted, rejected int
 	// Make sure to populate granted/rejected correctly even if the Votes slice
 	// contains members no longer part of the configuration. This doesn't really
 	// matter in the way the numbers are used (they're informational), but might

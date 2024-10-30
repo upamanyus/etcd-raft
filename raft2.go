@@ -59,7 +59,7 @@ type network struct {
 
 	peers   map[uint64]stateMachine
 	storage map[uint64]*MemoryStorage
-	dropm64   map[connem]uint64
+	dropm64 map[connem]uint64
 	ignorem map[raftpb.MessageType]bool
 
 	// msgHook is called for each message sent. It may inspect the
@@ -151,7 +151,7 @@ func newNetworkWithConfigInit(configFunc func(*Config), peers ...stateMachine) *
 	return &network{
 		peers:   npeers,
 		storage: nstorage,
-		dropm64:   make(map[connem]uint64),
+		dropm64: make(map[connem]uint64),
 		ignorem: make(map[raftpb.MessageType]bool),
 	}
 }
@@ -200,6 +200,7 @@ type testLeaderElectionStruct struct {
 	state   StateType
 	expTerm uint64
 }
+
 func testLeaderElection2(t *testing.T, preVote bool) {
 	var cfg func(*Config)
 	candState := StateCandidate
@@ -212,6 +213,7 @@ func testLeaderElection2(t *testing.T, preVote bool) {
 		candState = StatePreCandidate
 		candTerm = 0
 	}
+	nopStepper := &blackHole{}
 	tests := []testLeaderElectionStruct{
 		{newNetworkWithConfigInit(cfg, nil, nil, nil), StateLeader, 1},
 		{newNetworkWithConfigInit(cfg, nil, nil, nopStepper), StateLeader, 1},

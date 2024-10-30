@@ -17,13 +17,13 @@ package quorum
 import (
 	"fmt"
 	"math"
-	"slices"
+	"go.etcd.io/raft/v3/quorum/slices64"
 	"sort"
 	"strings"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
-type MajorityConfig map[uint64]struct{}
+type MajorityConfig map[uint64]unit
 
 func (c MajorityConfig) String() string {
 	sl := make([]uint64, 0, len(c))
@@ -43,17 +43,18 @@ func (c MajorityConfig) String() string {
 	return buf.String()
 }
 
+type tup struct {
+	id  uint64
+	idx Index
+	ok  bool // idx found?
+	bar int  // length of bar displayed for this tup
+}
+
 // Describe returns a (multi-line) representation of the commit indexes for the
 // given lookuper.
 func (c MajorityConfig) Describe(l AckedIndexer) string {
 	if len(c) == 0 {
 		return "<empty majority quorum>"
-	}
-	type tup struct {
-		id  uint64
-		idx Index
-		ok  bool // idx found?
-		bar int  // length of bar displayed for this tup
 	}
 
 	// Below, populate .bar so that the i-th largest commit index has bar i (we
@@ -151,7 +152,7 @@ func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
 			}
 		}
 	}
-	slices.Sort(srt)
+	slices64.Sort(srt)
 
 	// The smallest index into the array for which the value is acked by a
 	// quorum. In other words, from the end of the slice, move n/2+1 to the

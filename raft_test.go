@@ -3920,7 +3920,7 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 	return &network{
 		peers:   npeers,
 		storage: nstorage,
-		dropm64:   make(map[connem]uint64),
+		dropm64: make(map[connem]uint64),
 		ignorem: make(map[pb.MessageType]bool),
 	}
 }
@@ -3929,7 +3929,7 @@ func (nw *network) drop(from, to uint64, perc float64) {
 	if perc >= 1.0 {
 		nw.dropm64[connem{from, to}] = (1 << 64) - 1
 	} else {
-		nw.dropm64[connem{from, to}] = uint64(perc * float64(uint64((1 << 64) - 1)))
+		nw.dropm64[connem{from, to}] = uint64(perc * float64(uint64((1<<64)-1)))
 	}
 }
 
