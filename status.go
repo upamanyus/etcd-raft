@@ -89,7 +89,7 @@ func (s Status) MarshalJSON() ([]byte, error) {
 			j += subj
 		}
 		// remove the trailing ","
-		j = j[:len(j)-1] + "},"
+		j = string([]byte(j)[:len(j)-1]) + "},"
 	}
 
 	j += fmt.Sprintf(`"leadtransferee":"%x"}`, s.LeadTransferee)

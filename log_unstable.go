@@ -163,12 +163,13 @@ func (u *unstable) stableTo(id entryID) {
 // if most of it isn't being used. This avoids holding references to a bunch of
 // potentially large entries that aren't needed anymore. Simply clearing the
 // entries wouldn't be safe because clients might still be using them.
+const lenMultiple = 2
+
 func (u *unstable) shrinkEntriesArray() {
 	// We replace the array if we're using less than half of the space in
 	// it. This number is fairly arbitrary, chosen as an attempt to balance
 	// memory usage vs number of allocations. It could probably be improved
 	// with some focused tuning.
-	const lenMultiple = 2
 	if len(u.entries) == 0 {
 		u.entries = nil
 	} else if len(u.entries)*lenMultiple < cap(u.entries) {

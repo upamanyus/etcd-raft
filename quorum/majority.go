@@ -15,11 +15,11 @@
 package quorum
 
 import (
-	"cmp"
 	"fmt"
 	"math"
-	"slices"
 	"strings"
+
+	"go.etcd.io/raft/v3/quorum/slices"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
@@ -30,7 +30,7 @@ func (c MajorityConfig) String() string {
 	for id := range c {
 		sl = append(sl, id)
 	}
-	slices.Sort(sl)
+	slices.SortUint64(sl)
 	var buf strings.Builder
 	buf.WriteByte('(')
 	for i := range sl {
@@ -49,42 +49,36 @@ func (c MajorityConfig) Describe(l AckedIndexer) string {
 	if len(c) == 0 {
 		return "<empty majority quorum>"
 	}
-	type tup struct {
-		id  uint64
-		idx Index
-		ok  bool // idx found?
-		bar int  // length of bar displayed for this tup
-	}
 
 	// Below, populate .bar so that the i-th largest commit index has bar i (we
 	// plot this as sort of a progress bar). The actual code is a bit more
 	// complicated and also makes sure that equal index => equal bar.
 
 	n := len(c)
-	info := make([]tup, 0, n)
+	info := make([]slices.Tup, 0, n)
 	for id := range c {
 		idx, ok := l.AckedIndex(id)
-		info = append(info, tup{id: id, idx: idx, ok: ok})
+		info = append(info, slices.Tup{ID: id, Idx: uint64(idx), Ok: ok})
 	}
 
 	// Sort by index
-	slices.SortFunc(info, func(a, b tup) int {
-		if n := cmp.Compare(a.idx, b.idx); n != 0 {
+	slices.SortFuncTup(info, func(a, b slices.Tup) int {
+		if n := slices.CompareUint64(a.Idx, b.Idx); n != 0 {
 			return n
 		}
-		return cmp.Compare(a.id, b.id)
+		return slices.CompareUint64(a.ID, b.ID)
 	})
 
 	// Populate .bar.
 	for i := range info {
-		if i > 0 && info[i-1].idx < info[i].idx {
-			info[i].bar = i
+		if i > 0 && info[i-1].Idx < info[i].Idx {
+			info[i].Bar = i
 		}
 	}
 
 	// Sort by ID.
-	slices.SortFunc(info, func(a, b tup) int {
-		return cmp.Compare(a.id, b.id)
+	slices.SortFuncTup(info, func(a, b slices.Tup) int {
+		return slices.CompareUint64(a.ID, b.ID)
 	})
 
 	var buf strings.Builder
@@ -92,13 +86,13 @@ func (c MajorityConfig) Describe(l AckedIndexer) string {
 	// Print.
 	fmt.Fprint(&buf, strings.Repeat(" ", n)+"    idx\n")
 	for i := range info {
-		bar := info[i].bar
-		if !info[i].ok {
+		bar := info[i].Bar
+		if !info[i].Ok {
 			fmt.Fprint(&buf, "?"+strings.Repeat(" ", n))
 		} else {
 			fmt.Fprint(&buf, strings.Repeat("x", bar)+">"+strings.Repeat(" ", n-bar))
 		}
-		fmt.Fprintf(&buf, " %5d    (id=%d)\n", info[i].idx, info[i].id)
+		fmt.Fprintf(&buf, " %5d    (id=%d)\n", info[i].Idx, info[i].ID)
 	}
 	return buf.String()
 }
@@ -109,7 +103,7 @@ func (c MajorityConfig) Slice() []uint64 {
 	for id := range c {
 		sl = append(sl, id)
 	}
-	slices.Sort(sl)
+	slices.SortUint64(sl)
 	return sl
 }
 
@@ -151,7 +145,7 @@ func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
 			}
 		}
 	}
-	slices.Sort(srt)
+	slices.SortUint64(srt)
 
 	// The smallest index into the array for which the value is acked by a
 	// quorum. In other words, from the end of the slice, move n/2+1 to the

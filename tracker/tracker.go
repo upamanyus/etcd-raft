@@ -16,10 +16,10 @@ package tracker
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"go.etcd.io/raft/v3/quorum"
+	"go.etcd.io/raft/v3/quorum/slices"
 	pb "go.etcd.io/raft/v3/raftpb"
 )
 
@@ -197,7 +197,7 @@ func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 		n--
 		ids[n] = id
 	}
-	slices.Sort(ids)
+	slices.SortUint64(ids)
 	for _, id := range ids {
 		f(id, p.Progress[id])
 	}
@@ -224,7 +224,7 @@ func (p *ProgressTracker) VoterNodes() []uint64 {
 	for id := range m {
 		nodes = append(nodes, id)
 	}
-	slices.Sort(nodes)
+	slices.SortUint64(nodes)
 	return nodes
 }
 
@@ -237,7 +237,7 @@ func (p *ProgressTracker) LearnerNodes() []uint64 {
 	for id := range p.Learners {
 		nodes = append(nodes, id)
 	}
-	slices.Sort(nodes)
+	slices.SortUint64(nodes)
 	return nodes
 }
 

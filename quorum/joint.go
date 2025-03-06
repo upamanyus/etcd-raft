@@ -29,10 +29,11 @@ func (c JointConfig) String() string {
 // in the joint configuration.
 func (c JointConfig) IDs() map[uint64]struct{} {
 	m := map[uint64]struct{}{}
-	for _, cc := range c {
-		for id := range cc {
-			m[id] = struct{}{}
-		}
+	for id := range c[0] {
+		m[id] = struct{}{}
+	}
+	for id := range c[1] {
+		m[id] = struct{}{}
 	}
 	return m
 }

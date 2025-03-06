@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"slices"
 	"strings"
 	"sync"
 
 	"go.etcd.io/raft/v3/confchange"
 	"go.etcd.io/raft/v3/quorum"
+	"go.etcd.io/raft/v3/quorum/slices"
 	pb "go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -1047,7 +1047,7 @@ func (r *raft) campaign(t CampaignType) {
 		for id := range idMap {
 			ids = append(ids, id)
 		}
-		slices.Sort(ids)
+		slices.SortUint64(ids)
 	}
 	for _, id := range ids {
 		if id == r.id {

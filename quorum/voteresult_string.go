@@ -22,5 +22,5 @@ func (i VoteResult) String() string {
 	if i >= VoteResult(len(_VoteResult_index)-1) {
 		return "VoteResult(" + strconv.FormatInt(int64(i+1), 10) + ")"
 	}
-	return _VoteResult_name[_VoteResult_index[i]:_VoteResult_index[i+1]]
+	return string([]byte(_VoteResult_name)[_VoteResult_index[i]:_VoteResult_index[i+1]])
 }

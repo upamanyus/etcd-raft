@@ -16,8 +16,9 @@ package tracker
 
 import (
 	"fmt"
-	"slices"
 	"strings"
+
+	"go.etcd.io/raft/v3/quorum/slices"
 )
 
 // Progress represents a follower’s progress in the view of the leader. Leader
@@ -305,7 +306,7 @@ func (m ProgressMap) String() string {
 	for k := range m {
 		ids = append(ids, k)
 	}
-	slices.Sort(ids)
+	slices.SortUint64(ids)
 	var buf strings.Builder
 	for _, id := range ids {
 		fmt.Fprintf(&buf, "%d: %s\n", id, m[id])
