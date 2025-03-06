@@ -43,17 +43,18 @@ func (c MajorityConfig) String() string {
 	return buf.String()
 }
 
+type tup struct {
+	id  uint64
+	idx Index
+	ok  bool // idx found?
+	bar int  // length of bar displayed for this tup
+}
+
 // Describe returns a (multi-line) representation of the commit indexes for the
 // given lookuper.
 func (c MajorityConfig) Describe(l AckedIndexer) string {
 	if len(c) == 0 {
 		return "<empty majority quorum>"
-	}
-	type tup struct {
-		id  uint64
-		idx Index
-		ok  bool // idx found?
-		bar int  // length of bar displayed for this tup
 	}
 
 	// Below, populate .bar so that the i-th largest commit index has bar i (we
