@@ -43,6 +43,10 @@ func (cs *ConfState) Equivalent(cs2 *ConfState) error {
 		// Treat nil AutoLeave as false.
 		autoLeave := c.GetAutoLeave()
 		c.AutoLeave = &autoLeave
+
+		// Unknown fields, which a newer version may add, are not part of the
+		// configuration raft builds from a ConfState.
+		c.ProtoReflect().SetUnknown(nil)
 	}
 
 	if !proto.Equal(cs1v, cs2v) {
