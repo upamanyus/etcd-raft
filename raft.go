@@ -1325,14 +1325,15 @@ func stepLeader(r *raft, m *pb.Message) error {
 			if cc != nil {
 				alreadyPending := r.pendingConfIndex > r.raftLog.applied
 				alreadyJoint := len(r.trk.Config.Voters[1]) > 0
-				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
+				wantsLeaveJoint := cc.AsV2().LeaveJoint()
+				isEmpty := len(cc.AsV2().Changes) == 0
 
 				var failedCheck string
 				if alreadyPending {
 					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
 				} else if alreadyJoint && !wantsLeaveJoint {
 					failedCheck = "must transition out of joint config first"
-				} else if !alreadyJoint && wantsLeaveJoint {
+				} else if !alreadyJoint && isEmpty {
 					failedCheck = "not in joint state; refusing empty conf change"
 				}
 
