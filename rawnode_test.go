@@ -715,6 +715,54 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	assert.False(t, rawNode.HasReady())
 }
 
+// TestRawNodeSnapshotDuringConfChangeApply ensures that a follower that receives
+// a snapshot while the application is applying a conf change the snapshot covers
+// ends with the snapshot's configuration.
+func TestRawNodeSnapshotDuringConfChangeApply(t *testing.T) {
+	for i, tt := range []struct {
+		cc pb.ConfChangeI
+		cs *pb.ConfState
+	}{
+		// "add 4" at index 1, then "remove 4" at index 2.
+		{&pb.ConfChange{Type: pb.ConfChangeAddNode.Enum(), NodeId: new(uint64(4))},
+			&pb.ConfState{Voters: []uint64{1, 2, 3}}},
+		// "add 4" entering a joint configuration at index 1, still joint at index 2.
+		{&pb.ConfChangeV2{Transition: pb.ConfChangeTransitionJointExplicit.Enum(),
+			Changes: []*pb.ConfChangeSingle{{Type: pb.ConfChangeAddNode.Enum(), NodeId: new(uint64(4))}}},
+			&pb.ConfState{Voters: []uint64{1, 2, 3, 4}, VotersOutgoing: []uint64{1, 2, 3}}},
+	} {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			s := newTestMemoryStorage(withPeers(1, 2, 3))
+			rawNode, err := NewRawNode(newTestConfig(2, 10, 1, s))
+			require.NoError(t, err)
+			typ, data, err := pb.MarshalConfChange(tt.cc)
+			require.NoError(t, err)
+			snap := &pb.Message{From: new(uint64(1)), To: new(uint64(2)), Term: new(uint64(1)), Type: pb.MsgSnap.Enum(),
+				Snapshot: &pb.Snapshot{Metadata: &pb.SnapshotMetadata{Index: new(uint64(2)), Term: new(uint64(1)), ConfState: tt.cs}}}
+
+			// Leader 1 commits the conf change at index 1, and the application
+			// starts applying it.
+			require.NoError(t, rawNode.Step(&pb.Message{From: new(uint64(1)), To: new(uint64(2)), Term: new(uint64(1)),
+				Type: pb.MsgApp.Enum(), Index: new(uint64(0)), LogTerm: new(uint64(0)), Commit: new(uint64(1)),
+				Entries: []*pb.Entry{{Term: new(uint64(1)), Index: new(uint64(1)), Type: typ.Enum(), Data: data}}}))
+			rd := rawNode.Ready()
+			require.Len(t, rd.CommittedEntries, 1)
+			require.NoError(t, s.Append(rd.Entries))
+
+			// Leader 1's snapshot at index 2 arrives before the application
+			// calls ApplyConfChange.
+			require.NoError(t, rawNode.Step(snap))
+			rawNode.ApplyConfChange(tt.cc)
+			rawNode.Advance(rd)
+			// Leader 1 sends the snapshot again if the follower ignored it.
+			require.NoError(t, rawNode.Step(snap))
+
+			assert.Equal(t, tt.cs.GetVoters(), rawNode.raft.trk.Voters[0].Slice())
+			assert.Equal(t, tt.cs.GetVotersOutgoing(), rawNode.raft.trk.Voters[1].Slice())
+		})
+	}
+}
+
 // TestNodeAdvance from node_test.go has no equivalent in rawNode because there is
 // no dependency check between Ready() and Advance()
 func TestRawNodeStatus(t *testing.T) {
