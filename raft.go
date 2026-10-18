@@ -390,6 +390,10 @@ type raft struct {
 	// be proposed if the leader's applied index is greater than this
 	// value.
 	pendingConfIndex uint64
+	// deferredSnap is a MsgSnap received while committed entries were being
+	// applied. It is stepped again once they are applied, and then dropped if
+	// the term has changed.
+	deferredSnap *pb.Message
 	// disableConfChangeValidation is Config.DisableConfChangeValidation,
 	// see there for details.
 	disableConfChangeValidation bool
@@ -760,6 +764,11 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 		} else {
 			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.trk.Config)
 		}
+	}
+
+	if m := r.deferredSnap; m != nil && r.raftLog.applied == r.raftLog.applying {
+		r.deferredSnap = nil
+		_ = r.Step(m)
 	}
 }
 
@@ -1843,6 +1852,14 @@ func (r *raft) handleSnapshot(m *pb.Message) {
 	s := m.GetSnapshot()
 	s = pb.EnsureSnapshot(s)
 	sindex, sterm := s.GetMetadata().GetIndex(), s.GetMetadata().GetTerm()
+	if sindex > r.raftLog.committed && r.raftLog.applying > r.raftLog.applied {
+		// Restored now, the snapshot's configuration would be changed by the
+		// ApplyConfChange calls for the entries the application is applying.
+		r.logger.Infof("%x [applied: %d, applying: %d] deferred snapshot [index: %d, term: %d] until the entries are applied",
+			r.id, r.raftLog.applied, r.raftLog.applying, sindex, sterm)
+		r.deferredSnap = m
+		return
+	}
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, sindex, sterm)
