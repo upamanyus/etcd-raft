@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	pb "go.etcd.io/raft/v3/raftpb"
@@ -2751,6 +2752,27 @@ func TestRestoreFromSnapMsg(t *testing.T) {
 
 	assert.Equal(t, uint64(1), sm.lead)
 	// TODO(bdarnell): what should this test?
+}
+
+// TestRestoreFromSnapMsgUnknownField ensures that a follower restores a
+// snapshot whose ConfState has a field this version does not know, as a
+// snapshot from a newer version may have.
+func TestRestoreFromSnapMsgUnknownField(t *testing.T) {
+	cs := &pb.ConfState{Voters: []uint64{1, 2}}
+	cs.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 99, protowire.VarintType), 1))
+	s := &pb.Snapshot{
+		Metadata: &pb.SnapshotMetadata{
+			Index:     new(uint64(11)),
+			Term:      new(uint64(11)),
+			ConfState: cs,
+		},
+	}
+	m := &pb.Message{Type: pb.MsgSnap.Enum(), From: new(uint64(1)), Term: new(uint64(2)), Snapshot: s}
+
+	sm := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
+	sm.Step(m)
+
+	assert.Equal(t, uint64(11), sm.raftLog.lastIndex())
 }
 
 func TestSlowNodeRestore(t *testing.T) {
