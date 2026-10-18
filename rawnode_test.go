@@ -341,6 +341,46 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 	}
 }
 
+// TestRawNodeProposeEmptyJointConfChange ensures that each committed conf change
+// applies when, in a joint config, the application proposes a ConfChangeV2 with
+// an explicit joint transition and no changes.
+func TestRawNodeProposeEmptyJointConfChange(t *testing.T) {
+	s := newTestMemoryStorage(withPeers(1))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
+	require.NoError(t, err)
+	stabilize := func() {
+		for rawNode.HasReady() {
+			rd := rawNode.Ready()
+			s.Append(rd.Entries)
+			for _, ent := range rd.CommittedEntries {
+				if ent.GetType() == pb.EntryConfChangeV2 {
+					cc := &pb.ConfChangeV2{}
+					require.NoError(t, proto.Unmarshal(ent.GetData(), cc))
+					require.NotPanics(t, func() { rawNode.ApplyConfChange(cc) })
+				}
+			}
+			rawNode.Advance(rd)
+		}
+	}
+	require.NoError(t, rawNode.Campaign())
+	stabilize()
+
+	// Enter the joint config (1)&&(1), adding learner 2, without auto-leave.
+	require.NoError(t, rawNode.ProposeConfChange(&pb.ConfChangeV2{
+		Transition: pb.ConfChangeTransitionJointExplicit.Enum(),
+		Changes: []*pb.ConfChangeSingle{
+			{Type: pb.ConfChangeAddLearnerNode.Enum(), NodeId: new(uint64(2))},
+		},
+	}))
+	stabilize()
+	require.NotEmpty(t, rawNode.raft.trk.Config.Voters[1])
+
+	require.NoError(t, rawNode.ProposeConfChange(&pb.ConfChangeV2{
+		Transition: pb.ConfChangeTransitionJointExplicit.Enum(),
+	}))
+	stabilize()
+}
+
 // TestRawNodeJointAutoLeave tests the configuration change auto leave even leader
 // lost leadership.
 func TestRawNodeJointAutoLeave(t *testing.T) {
